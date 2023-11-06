@@ -1,5 +1,6 @@
-# go-html
-A static proxy technology, combined with the Gin framework
+# goHTML
+
+    一种静态代理技术，结合Gin框架一起使用，快速高效。
 
 ## 1. install
      go get github.com/gounits/gohtml
@@ -11,23 +12,26 @@ A static proxy technology, combined with the Gin framework
 ```go
 package main
 
+
 import (
 	"embed"
 	"github.com/gin-gonic/gin"
 	"github.com/gounits/gohtml"
+	"testing"
 )
 
-//go:embed fs
+//go:embed html
 var efs embed.FS
 
-func main() {
+func TestNew(t *testing.T) {
 	r := gin.Default()
-	r.Use(gohtml.NewFs(efs))
-	//r.Use(gohtml.New("fs"))
+	r.Use(gohtml.New(efs))
+	//r.Use(gohtml.New("html"))
 	if err := r.Run(":8080"); err != nil {
 		panic(err)
 	}
 }
+
 
 ```
 
