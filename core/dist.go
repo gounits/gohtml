@@ -13,6 +13,7 @@ import (
 	"github.com/gounits/gohtml/core/internal"
 	"github.com/gounits/gohtml/core/route"
 	"log"
+	"mime"
 	"net/http"
 	"path"
 	"strings"
@@ -100,7 +101,7 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 		suffix := path.Ext(html)
 
 		// 根据后缀返回不同的Content-Type响应
-		c.Header("Content-Type", internal.Header(suffix))
+		c.Header("Content-Type", mime.TypeByExtension(suffix))
 
 		// 写回文件的内容
 		c.Status(http.StatusOK)
