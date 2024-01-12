@@ -19,6 +19,9 @@ const (
 	FuzzyMatching    Easy = iota // 模糊匹配
 	AccurateMatching             // 精准匹配
 	RegexpMatching               // 规则匹配
+	SuffixMatching               // 后缀匹配
+	PrefixMatching               // 前缀匹配
+	AbsoluteMatching             // 绝对匹配
 )
 
 // Match URL地址和路由根据规则去判断，是否成功
@@ -30,6 +33,12 @@ func (e Easy) Match(url string, router string) (ok bool) {
 		ok = url == router
 	case RegexpMatching:
 		ok = regexp.MustCompile(router).MatchString(url)
+	case SuffixMatching:
+		ok = strings.HasSuffix(url, router)
+	case PrefixMatching:
+		ok = strings.HasPrefix(url, router)
+	case AbsoluteMatching:
+		ok = true
 	default:
 		ok = false
 	}

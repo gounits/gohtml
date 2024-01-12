@@ -20,7 +20,7 @@ var efs embed.FS
 func TestNew(t *testing.T) {
 	r := gin.Default()
 	r.Use(gohtml.New(efs))
-	//r.Use(gohtml.New("html"))
+	// r.Use(gohtml.New("html"))
 	if err := r.Run(":8080"); err != nil {
 		panic(err)
 	}

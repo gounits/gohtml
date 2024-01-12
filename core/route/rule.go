@@ -12,27 +12,36 @@ import (
 	"github.com/gounits/gohtml/core/rule"
 )
 
-// RuleRoute 定义一个简单的规则路由
+// ruleRoute 定义一个简单的规则路由
 // 路由地址 一一对应 一个静态资源的地址
 // Router -> Resource
-type RuleRoute struct {
+type ruleRoute struct {
 	Router   string     // 路由的地址
 	Resource string     // 静态资源的地址
 	Rules    rule.Ruler // 规则匹配是否满足
 }
 
-func (r *RuleRoute) Route(url string) (string, error) {
-	satisfy := r.Rules.Match(url, r.Router)
-	if satisfy {
-		return r.Resource, nil
+var (
+	NotMatchError = errors.New("路由不匹配")
+)
+
+func New(router string, resource string, rule_ rule.Ruler) Router {
+	return &ruleRoute{
+		Router:   router,
+		Resource: resource,
+		Rules:    rule_,
 	}
-	return "", errors.New("路由不匹配")
+}
+
+func (r *ruleRoute) Route(url string) (path string, err error) {
+	if r.Rules.Match(url, r.Router) {
+		path = r.Resource
+		return
+	}
+	err = NotMatchError
+	return
 }
 
 // Default 定义一个默认的规则路由，此路由用处比较多
 // 在很多的Js框架，都会编译成 dist/index.html
-var Default = &RuleRoute{
-	Router:   "/",
-	Resource: "index.html",
-	Rules:    rule.AccurateMatching,
-}
+var Default = New("/", "index.html", rule.AccurateMatching)
