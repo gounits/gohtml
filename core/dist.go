@@ -21,7 +21,7 @@ import (
 
 type AutoReplace struct {
 	rules    []route.Router
-	f        func(url string) string
+	f        route.Func
 	findPath string
 }
 
@@ -37,10 +37,12 @@ func (a *AutoReplace) AddRules(r ...route.Router) {
 
 // CustomRuleFunc 添加自定义替换函数
 // 首先采用自定义替换函数。
-// 如果自定义函数返回空字符串，
-// 然后将采用规则表（如果定义了规则表）
-func (a *AutoReplace) CustomRuleFunc(f func(url string) (resource string)) {
+func (a *AutoReplace) CustomRuleFunc(f route.Func) {
 	a.f = f
+}
+
+func (a *AutoReplace) AddRuleFunc(r route.Func) {
+	a.rules = append(a.rules, r)
 }
 
 /*
@@ -51,20 +53,24 @@ func (a *AutoReplace) CustomRuleFunc(f func(url string) (resource string)) {
 
 如果路由无法获取自定义资源名称，则返回路由地址
 */
-func (a *AutoReplace) muxPath(url string) string {
+func (a *AutoReplace) muxPath(url string) (resource string, err error) {
 	if a.f != nil {
-		resource := a.f(url)
-		if resource != "" {
-			return resource
+		resource, err = a.f(url)
+		if resource != "" && err == nil {
+			return
 		}
+		return
 	}
 
 	for _, rule := range a.rules {
-		if resource, err := rule.Route(url); err == nil {
-			return resource
+		resource, err = rule.Route(url)
+		if resource != "" && err == nil {
+			return
 		}
 	}
-	return url
+
+	resource = url
+	return
 }
 
 // static 多叉路由解析静态文件代理
@@ -75,7 +81,10 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 
 		// 根据路径映射表，从路由地址中获取静态网页名称
 		// 如果没有直接返回路线
-		html := a.muxPath(url)
+		html, err := a.muxPath(url)
+		if err != nil {
+			log.Println("匹配路由异常： " + err.Error())
+		}
 
 		// 判断静态资源是否存在，存在则返回真实路径
 		// 不存在返回空字符串
@@ -85,14 +94,14 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 		}
 
 		// 如果 staticFile 是 Dir，则停止
-		if _, err := filer.ReadDir(staticFile); err == nil {
+		if _, err = filer.ReadDir(staticFile); err == nil {
 			return
 		}
 
 		// 再次读取资源，如果无法读取则立即结束
 		text, err := filer.Open(staticFile)
 		if err != nil {
-			log.Println("Static resources are found, but resource information cannot be obtained: " + err.Error())
+			log.Println("没有读取到资源： " + err.Error())
 			return
 		}
 
@@ -107,7 +116,7 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 		c.Status(http.StatusOK)
 		_, err = c.Writer.Write(text)
 		if err != nil {
-			log.Println("Failed to send static resources: " + err.Error())
+			log.Println("返回响应数据失败： " + err.Error())
 			return
 		}
 		c.Abort()
@@ -115,11 +124,7 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 	return agent
 }
 
-// Load 默认index.html静态文件
+// Load 加载静态文件
 func (a *AutoReplace) Load(filer file.Filer) gin.HandlerFunc {
-	if a.f == nil && a.rules == nil {
-		// 没有规则表 增加一个默认的规则表
-		a.AddRules(route.Default)
-	}
 	return a.static(filer)
 }
