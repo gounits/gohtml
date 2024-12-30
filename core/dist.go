@@ -8,6 +8,7 @@
 package core
 
 import (
+	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/gounits/gohtml/core/file"
 	"github.com/gounits/gohtml/core/internal"
@@ -68,29 +69,57 @@ func (a *AutoReplace) muxPath(url string) (resource string, err error) {
 			return
 		}
 	}
-
-	resource = url
 	return
 }
 
 // static 多叉路由解析静态文件代理
 func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 	agent := func(c *gin.Context) {
+		var (
+			html       string
+			err        error
+			staticFile string
+		)
+
+		// 先走API接口
+		c.Next()
+
+		// 当获取API接口为404的是否，才考虑走代理
+		if c.Writer.Status() != http.StatusNotFound {
+			return
+		}
+
 		// 获取上一页的路由地址
 		url := strings.TrimSpace(c.Request.URL.Path)
 
 		// 根据路径映射表，从路由地址中获取静态网页名称
-		// 如果没有直接返回路线
-		html, err := a.muxPath(url)
-		if err != nil {
-			log.Println("匹配路由异常： " + err.Error())
+		if html, err = a.muxPath(url); err != nil {
+			if errors.Is(err, route.NotMatchError) {
+				// 如果没有找到对应的路由地址，则直接返回原始URL地址
+				html = url
+			}
 		}
 
-		// 判断静态资源是否存在，存在则返回真实路径
-		// 不存在返回空字符串
-		staticFile := internal.FileResource(filer, html, a.findPath)
-		if staticFile == "" {
-			return
+		// 判断静态资源是否存在，存在则返回真实路径，不存在返回空字符串
+		if staticFile = internal.FileResource(filer, html, a.findPath); staticFile == "" {
+			// 如果地址包含静态数据，则直接返回。
+			// 判断地址是否存在.css .js .png 等类似文件
+			if internal.HasExtension(url) || internal.HasExtension(html) {
+				return
+			}
+
+			// 没有找到对应的资源，则返回根目录
+			for _, rule := range a.rules {
+				if root, err := rule.Route("/"); err == nil {
+					staticFile = internal.FileResource(filer, root, a.findPath)
+					break
+				}
+			}
+
+			// 如果还没有找到 则直接返回
+			if staticFile == "" {
+				return
+			}
 		}
 
 		// 如果 staticFile 是 Dir，则停止
