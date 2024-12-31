@@ -21,14 +21,13 @@ import (
 )
 
 type AutoReplace struct {
-	rules    []route.Router
-	f        route.Func
-	findPath string
+	rules    []route.Router // 路由规则表
+	rootPath string         // 资源的根目录
 }
 
 // NewDist 初始化规则表结构
 func NewDist(path string) *AutoReplace {
-	return &AutoReplace{findPath: path}
+	return &AutoReplace{rootPath: path}
 }
 
 // AddRules 增加路由获取接口
@@ -39,7 +38,7 @@ func (a *AutoReplace) AddRules(r ...route.Router) {
 // CustomRuleFunc 添加自定义替换函数
 // 首先采用自定义替换函数。
 func (a *AutoReplace) CustomRuleFunc(f route.Func) {
-	a.f = f
+	a.rules = append(a.rules, f)
 }
 
 func (a *AutoReplace) AddRuleFunc(r route.Func) {
@@ -55,14 +54,6 @@ func (a *AutoReplace) AddRuleFunc(r route.Func) {
 如果路由无法获取自定义资源名称，则返回路由地址
 */
 func (a *AutoReplace) muxPath(url string) (resource string, err error) {
-	if a.f != nil {
-		resource, err = a.f(url)
-		if resource != "" && err == nil {
-			return
-		}
-		return
-	}
-
 	for _, rule := range a.rules {
 		resource, err = rule.Route(url)
 		if resource != "" && err == nil {
@@ -76,9 +67,10 @@ func (a *AutoReplace) muxPath(url string) (resource string, err error) {
 func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 	agent := func(c *gin.Context) {
 		var (
-			html       string
-			err        error
-			staticFile string
+			html       string // 获取的网页地址URL
+			staticFile string // 获取真实的文件信息地址
+			err        error  // 异常
+			data       []byte // 找到的资源数据
 		)
 
 		// 先走API接口
@@ -101,36 +93,28 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 		}
 
 		// 判断静态资源是否存在，存在则返回真实路径，不存在返回空字符串
-		if staticFile = internal.FileResource(filer, html, a.findPath); staticFile == "" {
+		if staticFile = internal.FileResource(filer, html, a.rootPath); staticFile == "" {
 			// 如果地址包含静态数据，则直接返回。
-			// 判断地址是否存在.css .js .png 等类似文件
+			// 判断地址是否请求.css .js .png 等类似文件 是就直接返回
 			if internal.HasExtension(url) || internal.HasExtension(html) {
 				return
 			}
 
-			// 没有找到对应的资源，则返回根目录
-			for _, rule := range a.rules {
-				if root, err := rule.Route("/"); err == nil {
-					staticFile = internal.FileResource(filer, root, a.findPath)
-					break
-				}
-			}
-
-			// 如果还没有找到 则直接返回
-			if staticFile == "" {
+			// 没有找到对应的资源，则返回根路由
+			if staticFile, err = a.muxPath("/"); err != nil {
 				return
 			}
 		}
 
 		// 如果 staticFile 是 Dir，则停止
+		// 注意：映射的路由表不能有目录名字
 		if _, err = filer.ReadDir(staticFile); err == nil {
 			return
 		}
 
 		// 再次读取资源，如果无法读取则立即结束
-		text, err := filer.Open(staticFile)
-		if err != nil {
-			log.Println("没有读取到资源： " + err.Error())
+		if data, err = filer.Open(staticFile); err != nil {
+			log.Printf("【ERROR】没有读取到资源： %v", err)
 			return
 		}
 
@@ -143,9 +127,9 @@ func (a *AutoReplace) static(filer file.Filer) gin.HandlerFunc {
 
 		// 写回文件的内容
 		c.Status(http.StatusOK)
-		_, err = c.Writer.Write(text)
-		if err != nil {
-			log.Println("返回响应数据失败： " + err.Error())
+
+		if _, err = c.Writer.Write(data); err != nil {
+			log.Printf("【ERROR】返回响应数据失败： %v", err)
 			return
 		}
 		c.Abort()

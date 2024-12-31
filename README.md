@@ -44,3 +44,7 @@ func TestNew(t *testing.T) {
     click http://localhost:8080/
 
 ![img_1.png](img/img_1.png)
+
+
+## 4.架构流程图
+![架构流程图](img/%E6%B5%81%E7%A8%8B%E5%9B%BE.svg)
